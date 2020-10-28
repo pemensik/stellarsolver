@@ -137,8 +137,6 @@ void StellarSolver::extract(bool calculateHFR, QRect frame)
 }
 
 //This will allow the solver to gracefully disconnect, abort, finish, and get deleted
-//Right now the internal solvers are all deleted when StellarSolver is deleted
-//I might try experimenting with this.
 void StellarSolver::releaseSextractorSolver(SextractorSolver *solver)
 {
     if(solver != nullptr)
@@ -163,15 +161,22 @@ void StellarSolver::start()
         emit finished();
         return;
     }
-
-    m_SextractorSolver = createSextractorSolver();
-
     m_isRunning = true;
     m_HasFailed = false;
+
     if(m_ProcessType == EXTRACT || m_ProcessType == EXTRACT_WITH_HFR)
     {
         m_ExtractorStars.clear();
         m_HasExtracted = false;
+
+        if(solverWithWCS)
+        {
+            //We do not want to delete the solver with WCS yet, since it is still in use.
+            if(solverWithWCS != m_SextractorSolver)
+                releaseSextractorSolver(m_SextractorSolver);
+        }
+        else
+            releaseSextractorSolver(m_SextractorSolver);
     }
     else
     {
@@ -180,17 +185,23 @@ void StellarSolver::start()
         hasWCS = false;
         hasWCSCoord = false;
         wcs_coord = nullptr;
+
+        releaseSextractorSolver(m_SextractorSolver);
+        releaseSextractorSolver(solverWithWCS);
+        for(SextractorSolver *solver: parallelSolvers)
+            releaseSextractorSolver(solver);
+        parallelSolvers.clear();
     }
 
-    //    if(m_isBlocking)
-    //        return;
+    m_SextractorSolver = createSextractorSolver();
 
     //These are the solvers that support parallelization, ASTAP and the online ones do not
     if(params.multiAlgorithm != NOT_MULTI && m_ProcessType == SOLVE && (m_SolverType == SOLVER_STELLARSOLVER
             || m_SolverType == SOLVER_LOCALASTROMETRY))
     {
-        m_SextractorSolver->extract();
-        parallelSolve();
+        m_SextractorSolver->m_ProcessType = EXTRACT;
+        connect(m_SextractorSolver, &SextractorSolver::finished, this, &StellarSolver::parallelSolve);
+        m_SextractorSolver->start();
     }
     else if(m_SolverType == SOLVER_ONLINEASTROMETRY)
     {
@@ -202,7 +213,6 @@ void StellarSolver::start()
         connect(m_SextractorSolver, &SextractorSolver::finished, this, &StellarSolver::processFinished);
         m_SextractorSolver->start();
     }
-
 }
 
 bool StellarSolver::checkParameters()
@@ -267,9 +277,7 @@ bool StellarSolver::checkParameters()
 //to attempt to efficiently use modern multi core computers to speed up the solve
 void StellarSolver::parallelSolve()
 {
-    if(params.multiAlgorithm == NOT_MULTI || !(m_SolverType == SOLVER_STELLARSOLVER || m_SolverType == SOLVER_LOCALASTROMETRY))
-        return;
-    parallelSolvers.clear();
+    m_SextractorSolver->m_ProcessType = SOLVE; //So the child solvers will have the right type
     m_ParallelSolversFinishedCount = 0;
     int threads = QThread::idealThreadCount();
 
@@ -358,6 +366,8 @@ void StellarSolver::processFinished(int code)
             if(m_SextractorSolver->hasWCSData())
             {
                 hasWCS = true;
+                if(solverWithWCS)
+                    releaseSextractorSolver(solverWithWCS);
                 solverWithWCS = m_SextractorSolver;
                 if(loadWCS)
                 {
@@ -405,19 +415,15 @@ int StellarSolver::whichSolver(SextractorSolver *solver)
 //If they
 void StellarSolver::finishParallelSolve(int success)
 {
-    m_ParallelSolversFinishedCount++;
     SextractorSolver *reportingSolver = qobject_cast<SextractorSolver*>(sender());
     if(!reportingSolver)
         return;
+    if(reportingSolver == m_SextractorSolver)
+        return;
+    m_ParallelSolversFinishedCount++;
 
     if(success == 0 && !m_HasSolved)
     {
-        for(auto solver : parallelSolvers)
-        {
-            disconnect(solver, &SextractorSolver::logOutput, this, &StellarSolver::logOutput);
-            if(solver != reportingSolver && solver->isRunning())
-                solver->abort();
-        }
         if(m_SSLogLevel != LOG_OFF)
         {
             emit logOutput(QString("Successfully solved with child solver: %1").arg(whichSolver(reportingSolver)));
@@ -430,7 +436,10 @@ void StellarSolver::finishParallelSolve(int success)
 
         if(reportingSolver->hasWCSData() && loadWCS)
         {
+            if(solverWithWCS)
+                releaseSextractorSolver(solverWithWCS);
             solverWithWCS = reportingSolver;
+            parallelSolvers.removeOne(reportingSolver);
             hasWCS = true;
             solverWithWCS->computingWCS = true;
             disconnect(solverWithWCS, &SextractorSolver::finished, this, &StellarSolver::finishParallelSolve);
@@ -440,26 +449,25 @@ void StellarSolver::finishParallelSolve(int success)
         }
         m_HasSolved = true;
         emit ready();
+        for(SextractorSolver *solver: parallelSolvers)
+            releaseSextractorSolver(solver);
+        parallelSolvers.clear();
+
+        //Don't emit finished until WCS is done if we are doing WCS extraction.
+        if(!(loadWCS && hasWCS))
+        {
+            m_isRunning = false;
+            emit finished();
+        }
     }
     else
     {
         if(m_SSLogLevel != LOG_OFF && !m_HasSolved)
             emit logOutput(QString("Child solver: %1 did not solve or was aborted").arg(whichSolver(reportingSolver)));
-    }
+        parallelSolvers.removeOne(reportingSolver);
+        releaseSextractorSolver(reportingSolver);
 
-    if(m_ParallelSolversFinishedCount == parallelSolvers.count())
-    {
-
-        if(m_HasSolved)
-        {
-            //Don't emit finished until WCS is done if we are doing WCS extraction.
-            if(!(loadWCS && hasWCS))
-            {
-                m_isRunning = false;
-                emit finished();
-            }
-        }
-        else
+        if(m_ParallelSolversFinishedCount >= parallelSolvers.count())
         {
             m_isRunning = false;
             m_HasFailed = true;
@@ -509,8 +517,12 @@ bool StellarSolver::pixelToWCS(const QPointF &pixelPoint, FITSImage::wcs_point &
 //This is the abort method.  The way that it works is that it creates a file.  Astrometry.net is monitoring for this file's creation in order to abort.
 void StellarSolver::abort()
 {
-    for(auto solver : parallelSolvers)
-        solver->abort();
+    if(parallelSolvers.count() > 0)
+    {
+        for(SextractorSolver *solver: parallelSolvers)
+            releaseSextractorSolver(solver);
+        parallelSolvers.clear();
+    }
     if(m_SextractorSolver)
         m_SextractorSolver->abort();
     wasAborted = true;

@@ -31,7 +31,7 @@ class OnlineSolver : public ExternalSextractorSolver
         Q_OBJECT
     public:
         explicit OnlineSolver(ProcessType type, ExtractorType sexType, SolverType solType, FITSImage::Statistic imagestats,
-                              uint8_t const *imageBuffer, QObject *parent);
+                              uint8_t const *imageBuffer, QObject *parent = nullptr);
 
         QString astrometryAPIKey;
         QString astrometryAPIURL;
