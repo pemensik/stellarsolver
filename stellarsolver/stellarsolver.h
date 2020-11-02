@@ -266,7 +266,7 @@ class StellarSolver : public QObject
         bool appendStarsRAandDEC(QList<FITSImage::Star> &stars);
 
         bool checkParameters();
-        SextractorSolver* createSextractorSolver();
+        void createSextractorSolver();
 
         //This finds out the amount of available RAM on the system
         bool getAvailableRAM(double &availableRAM, double &totalRAM);

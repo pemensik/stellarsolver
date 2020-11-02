@@ -47,10 +47,8 @@ StellarSolver::~StellarSolver()
 
 }
 
-SextractorSolver* StellarSolver::createSextractorSolver()
+void StellarSolver::createSextractorSolver()
 {
-    SextractorSolver *solver;
-
     if(m_ProcessType == SOLVE && m_SolverType == SOLVER_ONLINEASTROMETRY)
     {
         OnlineSolver *onlineSolver = new OnlineSolver(m_ProcessType, m_SextractorType, m_SolverType, m_Statistics, m_ImageBuffer,
@@ -59,11 +57,11 @@ SextractorSolver* StellarSolver::createSextractorSolver()
         onlineSolver->astrometryAPIKey = m_AstrometryAPIKey;
         onlineSolver->astrometryAPIURL = m_AstrometryAPIURL;
         onlineSolver->sextractorBinaryPath = m_SextractorBinaryPath;
-        solver = onlineSolver;
+        m_SextractorSolver = onlineSolver;
     }
     else if((m_ProcessType == SOLVE && m_SolverType == SOLVER_STELLARSOLVER) || (m_ProcessType != SOLVE
             && m_SextractorType != EXTRACTOR_EXTERNAL))
-        solver = new InternalSextractorSolver(m_ProcessType, m_SextractorType, m_SolverType, m_Statistics, m_ImageBuffer, this);
+        m_SextractorSolver = new InternalSextractorSolver(m_ProcessType, m_SextractorType, m_SolverType, m_Statistics, m_ImageBuffer, this);
     else
     {
         ExternalSextractorSolver *extSolver = new ExternalSextractorSolver(m_ProcessType, m_SextractorType, m_SolverType,
@@ -76,26 +74,24 @@ SextractorSolver* StellarSolver::createSextractorSolver()
         extSolver->wcsPath = m_WCSPath;
         extSolver->cleanupTemporaryFiles = m_CleanupTemporaryFiles;
         extSolver->autoGenerateAstroConfig = m_AutoGenerateAstroConfig;
-        solver = extSolver;
+        m_SextractorSolver = extSolver;
     }
 
     if(useSubframe)
-        solver->setUseSubframe(m_Subframe);
-    solver->m_LogToFile = m_LogToFile;
-    solver->m_LogFileName = m_LogFileName;
-    solver->m_AstrometryLogLevel = m_AstrometryLogLevel;
-    solver->m_SSLogLevel = m_SSLogLevel;
-    solver->m_BasePath = m_BasePath;
-    solver->m_ActiveParameters = params;
-    solver->indexFolderPaths = indexFolderPaths;
+        m_SextractorSolver->setUseSubframe(m_Subframe);
+    m_SextractorSolver->m_LogToFile = m_LogToFile;
+    m_SextractorSolver->m_LogFileName = m_LogFileName;
+    m_SextractorSolver->m_AstrometryLogLevel = m_AstrometryLogLevel;
+    m_SextractorSolver->m_SSLogLevel = m_SSLogLevel;
+    m_SextractorSolver->m_BasePath = m_BasePath;
+    m_SextractorSolver->m_ActiveParameters = params;
+    m_SextractorSolver->indexFolderPaths = indexFolderPaths;
     if(m_UseScale)
-        solver->setSearchScale(m_ScaleLow, m_ScaleHigh, m_ScaleUnit);
+        m_SextractorSolver->setSearchScale(m_ScaleLow, m_ScaleHigh, m_ScaleUnit);
     if(m_UsePosition)
-        solver->setSearchPositionInDegrees(m_SearchRA, m_SearchDE);
+        m_SextractorSolver->setSearchPositionInDegrees(m_SearchRA, m_SearchDE);
     if(m_SSLogLevel != LOG_OFF)
-        connect(solver, &SextractorSolver::logOutput, this, &StellarSolver::logOutput);
-
-    return solver;
+        connect(m_SextractorSolver, &SextractorSolver::logOutput, this, &StellarSolver::logOutput);
 }
 
 //Methods to get default file paths
@@ -192,7 +188,7 @@ void StellarSolver::start()
         parallelSolvers.clear();
     }
 
-    m_SextractorSolver = createSextractorSolver();
+    createSextractorSolver();
 
     //These are the solvers that support parallelization, ASTAP and the online ones do not
     if(params.multiAlgorithm != NOT_MULTI && m_ProcessType == SOLVE && (m_SolverType == SOLVER_STELLARSOLVER
