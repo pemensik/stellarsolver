@@ -1287,49 +1287,51 @@ int ExternalSextractorSolver::writeSextractorTable()
         yArray[i] = m_ExtractedStars.at(i).y;
         magArray[i] = m_ExtractedStars.at(i).mag;
     }
+    
+    int firstrow  = 1;  /* first row in table to write   */
+    int firstelem = 1;
+    int column = 1;
 
     if(fits_create_tbl(new_fptr, BINARY_TBL, nrows, tfields,
                        ttype, tform, tunit, extfile, &status))
     {
         emit logOutput(QString("Could not create binary table."));
-        return status;
+        goto exit;
     }
 
-    int firstrow  = 1;  /* first row in table to write   */
-    int firstelem = 1;
-
-    int column = 1;
     if(fits_write_col(new_fptr, TFLOAT, column, firstrow, firstelem, nrows, xArray, &status))
     {
         emit logOutput(QString("Could not write x pixels in binary table."));
-        return status;
+        goto exit;
     }
 
     column = 2;
     if(fits_write_col(new_fptr, TFLOAT, column, firstrow, firstelem, nrows, yArray, &status))
     {
         emit logOutput(QString("Could not write y pixels in binary table."));
-        return status;
+        goto exit;
     }
 
     column = 3;
     if(fits_write_col(new_fptr, TFLOAT, column, firstrow, firstelem, nrows, magArray, &status))
     {
         emit logOutput(QString("Could not write magnitudes in binary table."));
-        return status;
+        goto exit;
     }
 
     if(fits_close_file(new_fptr, &status))
     {
         emit logOutput(QString("Error closing file."));
-        return status;
+        goto exit;
     }
+    status = 0;
 
-    free(xArray);
-    free(yArray);
-    free(magArray);
+    exit:
+        delete[] xArray;
+        delete[] yArray;
+        delete[] magArray;
 
-    return 0;
+        return status;
 }
 
 //This is very necessary for solving non-fits images with external Sextractor
@@ -1374,9 +1376,36 @@ int ExternalSextractorSolver::saveAsFITS()
         return status;
     }
 
-    fitsfile *fptr = new_fptr;
+    int bitpix;
+    switch(m_Statistics.dataType)
+    {
+    case SEP_TBYTE:
+        bitpix = BYTE_IMG;
+        break;
+    case TSHORT:
+        bitpix = SHORT_IMG;
+        break;
+    case TUSHORT:
+        bitpix = USHORT_IMG;
+        break;
+    case TLONG:
+        bitpix = LONG_IMG;
+        break;
+    case TULONG:
+        bitpix = ULONG_IMG;
+        break;
+    case TFLOAT:
+        bitpix = FLOAT_IMG;
+        break;
+    case TDOUBLE:
+        bitpix = DOUBLE_IMG;
+        break;
+    default:
+        bitpix = BYTE_IMG;
+    }
 
-    if (fits_create_img(fptr, BYTE_IMG, naxis, naxes, &status))
+    fitsfile *fptr = new_fptr;
+    if (fits_create_img(fptr, bitpix, naxis, naxes, &status))
     {
         emit logOutput(QString("fits_create_img failed: %1").arg(error_status));
         status = 0;
@@ -1386,15 +1415,11 @@ int ExternalSextractorSolver::saveAsFITS()
     }
 
     /* Write Data */
-    uint8_t *imageBuffer = new uint8_t[m_Statistics.samples_per_channel * channels * m_Statistics.bytesPerPixel];
-    memcpy(imageBuffer, m_ImageBuffer, m_Statistics.samples_per_channel * channels * m_Statistics.bytesPerPixel);
-    if (fits_write_img(fptr, m_Statistics.dataType, 1, nelements, imageBuffer, &status))
+    if (fits_write_img(fptr, m_Statistics.dataType, 1, nelements, const_cast<void *>(reinterpret_cast<const void *>(m_ImageBuffer)), &status))
     {
-        delete[] imageBuffer;
         fits_report_error(stderr, status);
         return status;
     }
-    delete[] imageBuffer;
 
     /* Write keywords */
 
