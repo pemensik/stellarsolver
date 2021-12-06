@@ -830,6 +830,7 @@ bool InternalSextractorSolver::prepare_job()
 
     //These initialize the blind and solver objects, and they MUST be in this order according to astrometry.net
     blind_init(bp);
+    bp->libmode = TRUE;
     solver_set_default_values(sp);
 
     //These set the width and the height of the image in the solver
