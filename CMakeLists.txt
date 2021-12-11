@@ -264,7 +264,10 @@ set(ALL_SRCS
     )
 
 if (WIN32)
-    add_library(stellarsolver STATIC ${ALL_SRCS})
+    set(WIN32_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/stellarsolver/astrometry/compat/win32/gettimeofday.c
+    )
+    add_library(stellarsolver STATIC ${ALL_SRCS} ${WIN32_SRCS})
 else(WIN32)
     add_library(stellarsolver SHARED ${ALL_SRCS})
 endif(WIN32)
