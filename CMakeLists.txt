@@ -55,6 +55,8 @@ if (WIN32)
     file(APPEND "${config_FN}" "#define NEED_DECLARE_QSORT_R 1\n")
     file(APPEND "${config_FN}" "#define NEED_QSORT_R 1\n")
     file(APPEND "${config_FN}" "#define NEED_SWAP_QSORT_R 0\n")
+    # add unix code compatibility headers only for Windows builds
+    include_directories("${CMAKE_CURRENT_SOURCE_DIR}/stellarsolver/astrometry/compat/win32")
 
 else(WIN32)
 
