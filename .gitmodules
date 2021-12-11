@@ -1,0 +1,4 @@
+[submodule "stellarsolver/astrometry"]
+	path = stellarsolver/astrometry
+	url = https://github.com/pemensik/astrometry.net.git
+	branch = stesol-functional
