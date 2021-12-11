@@ -1229,7 +1229,7 @@ bool MainWindow::imageLoad()
         return false;
     }
     QString fileURL = QFileDialog::getOpenFileName(nullptr, "Load Image", dirPath,
-                      "Images (*.fits *.fit *.bmp *.gif *.jpg *.jpeg *.tif *.tiff)");
+                      "Images (*.fits *.fit *.bmp *.gif *.jpg *.jpeg *.tif *.tiff *.png)");
     if (fileURL.isEmpty())
         return false;
     QFileInfo fileInfo(fileURL);
